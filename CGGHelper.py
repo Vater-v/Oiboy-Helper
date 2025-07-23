@@ -1,4 +1,4 @@
-#v2.0 - stable final release
+#2.1 stable 95%
 import tkinter as tk
 from tkinter import ttk
 import pygetwindow as gw
@@ -10,6 +10,7 @@ import subprocess
 
 # === Константы ===
 APP_TITLE = "CGGHelper"
+VERSION = "2.1"
 TABLE_ASPECT = 557 / 424
 LOBBY_ASPECT = 333 / 623
 MIN_TABLE_SCALE = 0.75
@@ -39,7 +40,7 @@ monitor_thread = None
 
 # === Интерфейс ===
 root = tk.Tk()
-root.title(APP_TITLE + " v2.0")
+root.title(APP_TITLE + " v" + VERSION)
 root.geometry("420x290")
 root.configure(bg="#1e1e1e")
 root.resizable(False, False)
@@ -107,7 +108,7 @@ def is_valid_lobby_window(w):
 def any_valid_tables_exist():
     return any(is_valid_table_window(w) or is_valid_lobby_window(w) for w in gw.getAllWindows())
 
-# === Расстановка столов ===
+# === Расстановка столов (с проверкой на свернутые) ===
 def place_tables():
     log("[CGG] Расстановка столов...")
     tables = [w for w in gw.getAllWindows() if is_valid_table_window(w) and not w.isMinimized()][:4]
@@ -198,7 +199,14 @@ def start_recording():
     if not is_looping and is_camtasia_active():
         log("▶️ Старт записи")
         focus_camtasia()
-        pyautogui.press("f9")
+        
+        # Если запись на паузе — сначала снимаем с паузы (F10), потом начинаем новую запись (F9)
+        if any('Paused...' in t for t in gw.getAllTitles()):
+            log("⏸️ Запись на паузе — снимаем с паузы и перезапускаем")
+            pyautogui.press("f10")  # Снимаем с паузы
+            time.sleep(1.5)
+        
+        pyautogui.press("f9")  # Старт записи
         time.sleep(1.5)
         if not is_recording_window_open():
             log("⚠️ Повтор F9")
@@ -226,19 +234,6 @@ def stop_recording():
             move_camtasia_home()
         else:
             log("[WARN] F10 не сработал")
-
-# === Мигание окна ===
-def start_blinking_loop():
-    def _blink():
-        global blinking
-        while blinking and remaining_time > 0:
-            if not any_valid_tables_exist() or not is_camtasia_active():
-                blinking = False
-                root.configure(bg="#1e1e1e")
-                return
-            root.configure(bg="#ff0000"); time.sleep(0.4)
-            root.configure(bg="#ffffff"); time.sleep(0.4)
-    threading.Thread(target=_blink, daemon=True).start()
 
 # === Обновление прогресс-бара с цветом ===
 def update_progress():
