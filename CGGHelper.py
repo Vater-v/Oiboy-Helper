@@ -1,4 +1,4 @@
-# CGGHelper – ClubGG Утилита (финальная версия с расширенным миганием)
+# CGGHelper – ClubGG Утилита (финальная версия с расширенным миганием) v1.6
 import tkinter as tk
 from tkinter import ttk
 import pygetwindow as gw
@@ -15,7 +15,12 @@ LOBBY_ASPECT = 333 / 623
 MIN_TABLE_SCALE = 0.75
 TABLE_SIZE_REF = (557, 424)
 LOBBY_SIZE_REF = (333, 623)
-SLOTS = [(277, 422), (832, 0), (1103, 423), (300, 0)]
+SLOTS = [
+    (0, 0),       # Окно 1
+    (280, 420),   # Окно 2
+    (830, 0),     # Окно 3
+    (1105, 425)   # Окно 4
+]
 LOBBY_POS = (1657, 143)
 LOBBY_SIZE = (333, 623)
 BOT_PLAYER_TITLE = "Holdem Desktop"
