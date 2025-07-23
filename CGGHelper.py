@@ -90,9 +90,6 @@ def log(msg):
     except: print(msg.encode("ascii", "replace").decode())
     flash_message(msg)
 
-def is_aspect_match(w, h, ref_ratio, tol=0.03):
-    return h != 0 and (ref_ratio * (1 - tol)) <= (w / h) <= (ref_ratio * (1 + tol))
-
 def is_size_reasonable(w, h, ref_w, ref_h):
     return w >= ref_w * MIN_TABLE_SCALE and h >= ref_h * MIN_TABLE_SCALE
 
@@ -107,17 +104,32 @@ def is_valid_table_window(w):
 def any_valid_tables_exist():
     return any(is_valid_table_window(w) for w in gw.getAllWindows())
 
-# === Расстановка ===
+def is_aspect_match(w, h, ref_ratio, tol=0.03):
+    """Проверка соответствия соотношения сторон с учётом допустимой погрешности"""
+    return h != 0 and (ref_ratio * (1 - tol)) <= (w / h) <= (ref_ratio * (1 + tol))
+
+def is_size_reasonable(w, h, ref_w, ref_h):
+    """Проверка размеров окна на минимальные значения"""
+    return w >= ref_w * MIN_TABLE_SCALE and h >= ref_h * MIN_TABLE_SCALE
+
+def is_valid_table_window(w):
+    """Проверка валидности окна (стол) по соотношению сторон и минимальным размерам"""
+    return (
+        APP_TITLE not in w.title and
+        w.visible and  # проверка, что окно видно
+        is_aspect_match(w.width, w.height, TABLE_ASPECT) and  # проверка соотношения сторон
+        is_size_reasonable(w.width, w.height, *TABLE_SIZE_REF)  # проверка минимальных размеров
+    )
+
 def place_tables():
     log("[CGG] Расстановка столов...")
-    # Убираем фильтрацию на свернутые окна
-    tables = [w for w in gw.getAllWindows() if is_valid_table_window(w) and w.isVisible()][:4]
+    tables = [w for w in gw.getAllWindows() if is_valid_table_window(w)][:4]  # Убираем невалидные окна
     for i, (win, (x, y)) in enumerate(zip(tables, SLOTS), 1):
         try:
-            win.restore()  # Восстанавливаем окно, если оно было свернуто
-            time.sleep(0.1)  # Небольшая задержка
-            win.moveTo(x, y)  # Расставляем на экране
-            win.resizeTo(*TABLE_SIZE_REF)  # Изменяем размер
+            win.restore()
+            time.sleep(0.1)
+            win.moveTo(x, y)
+            win.resizeTo(*TABLE_SIZE_REF)
             log(f"Стол {i} — {win.title}")
         except Exception as e:
             log(f"[ERR] Стол {i}: {e}")
