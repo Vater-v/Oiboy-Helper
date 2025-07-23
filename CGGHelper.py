@@ -1,4 +1,4 @@
-#v1.8 maybe stable
+#v1.9 90% stable
 import tkinter as tk
 from tkinter import ttk
 import pygetwindow as gw
@@ -95,9 +95,16 @@ def is_valid_table_window(w):
         is_aspect_match(w.width, w.height, TABLE_ASPECT) and
         is_size_reasonable(w.width, w.height, *TABLE_SIZE_REF)
     )
+def is_valid_lobby_window(w):
+    return (
+        w.visible and
+        is_aspect_match(w.width, w.height, LOBBY_ASPECT) and
+        is_size_reasonable(w.width, w.height, *LOBBY_SIZE_REF)
+    )
+
 
 def any_valid_tables_exist():
-    return any(is_valid_table_window(w) for w in gw.getAllWindows())
+    return any(is_valid_table_window(w) or is_valid_lobby_window(w) for w in gw.getAllWindows())
 
 # === Расстановка столов ===
 def place_tables():
@@ -137,6 +144,10 @@ def place_lobby_bot_rec():
                 win.moveTo(*LOBBY_POS)
                 win.resizeTo(*LOBBY_SIZE)
                 win.alwaysOnTop = True
+                win.minimize(); time.sleep(0.1)
+                win.restore()
+                win.activate()
+
                 log("✅ Лобби размещено")
                 break
         except Exception as e:
