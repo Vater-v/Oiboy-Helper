@@ -1,4 +1,4 @@
-#v1.9 90% stable
+#v2.0 - stable final release
 import tkinter as tk
 from tkinter import ttk
 import pygetwindow as gw
@@ -16,7 +16,7 @@ MIN_TABLE_SCALE = 0.75
 TABLE_SIZE_REF = (557, 424)
 LOBBY_SIZE_REF = (333, 623)
 SLOTS = [(0, 0), (280, 420), (830, 0), (1105, 425)]
-LOBBY_POS = (1622, 143)  # было 1642 — сдвиг на 20px влево
+LOBBY_POS = (1622, 143)  # сдвиг на 20px влево
 LOBBY_SIZE = (333, 623)
 BOT_PLAYER_TITLE = "Holdem Desktop"
 BOT_PLAYER_POS = (1386, 0)
@@ -39,7 +39,7 @@ monitor_thread = None
 
 # === Интерфейс ===
 root = tk.Tk()
-root.title(APP_TITLE + " v1.8")
+root.title(APP_TITLE + " v2.0")
 root.geometry("420x290")
 root.configure(bg="#1e1e1e")
 root.resizable(False, False)
@@ -49,6 +49,7 @@ except: pass
 
 status_label = tk.StringVar(value="Автозапись отключена")
 label_time = tk.StringVar(value="След. перезапуск: --:--:--")
+
 # === Уведомление + лог ===
 def flash_message(text, duration=FLASH_DURATION):
     flash = tk.Toplevel(root)
@@ -95,6 +96,7 @@ def is_valid_table_window(w):
         is_aspect_match(w.width, w.height, TABLE_ASPECT) and
         is_size_reasonable(w.width, w.height, *TABLE_SIZE_REF)
     )
+
 def is_valid_lobby_window(w):
     return (
         w.visible and
@@ -102,14 +104,13 @@ def is_valid_lobby_window(w):
         is_size_reasonable(w.width, w.height, *LOBBY_SIZE_REF)
     )
 
-
 def any_valid_tables_exist():
     return any(is_valid_table_window(w) or is_valid_lobby_window(w) for w in gw.getAllWindows())
 
 # === Расстановка столов ===
 def place_tables():
     log("[CGG] Расстановка столов...")
-    tables = [w for w in gw.getAllWindows() if is_valid_table_window(w)][:4]
+    tables = [w for w in gw.getAllWindows() if is_valid_table_window(w) and not w.isMinimized()][:4]
     for i, (win, (x, y)) in enumerate(zip(tables, SLOTS), 1):
         try:
             win.restore(); time.sleep(0.1)
@@ -144,10 +145,10 @@ def place_lobby_bot_rec():
                 win.moveTo(*LOBBY_POS)
                 win.resizeTo(*LOBBY_SIZE)
                 win.alwaysOnTop = True
-                win.minimize(); time.sleep(0.1)
+                win.minimize()  # Чтобы гарантировать слои, минимизируем и восстанавливаем
+                time.sleep(0.1)
                 win.restore()
-                win.activate()
-
+                win.activate()  # Активируем окно
                 log("✅ Лобби размещено")
                 break
         except Exception as e:
@@ -164,6 +165,7 @@ def place_lobby_bot_rec():
                 break
         except Exception as e:
             log(f"[ERR] Camtasia: {e}")
+
 # === Camtasia: позиция ===
 def move_camtasia_home():
     for win in gw.getWindowsWithTitle(CAMTASIA_TITLE):
@@ -237,6 +239,7 @@ def start_blinking_loop():
             root.configure(bg="#ff0000"); time.sleep(0.4)
             root.configure(bg="#ffffff"); time.sleep(0.4)
     threading.Thread(target=_blink, daemon=True).start()
+
 # === Обновление прогресс-бара с цветом ===
 def update_progress():
     global blinking, is_looping
@@ -280,7 +283,10 @@ def recording_cycle():
         if not is_camtasia_active():
             log("❌ Camtasia закрыта"); toggle_auto(force_off=True); return
         if any('Paused...' in t for t in gw.getAllTitles()):
-            log("⏸️ Пауза — перезапуск"); stop_recording(); time.sleep(1); start_recording()
+            log("⏸️ Пауза — остановка записи и перезапуск...")
+            stop_recording()  # Останавливаем запись на паузе
+            time.sleep(1)
+            start_recording()  # Запускаем снова
         if remaining_time <= 1500 and not blinking:
             blinking = True
             start_blinking_loop()
