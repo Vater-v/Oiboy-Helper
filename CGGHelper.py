@@ -1,4 +1,4 @@
-# CGGHelper – ClubGG Утилита (финальная версия с расширенным миганием) v1.6
+#v1.7
 import tkinter as tk
 from tkinter import ttk
 import pygetwindow as gw
@@ -6,7 +6,7 @@ import pyautogui
 import threading
 import time
 import psutil
-import os
+import subprocess
 
 # === Константы ===
 APP_TITLE = "CGGHelper"
@@ -15,13 +15,8 @@ LOBBY_ASPECT = 333 / 623
 MIN_TABLE_SCALE = 0.75
 TABLE_SIZE_REF = (557, 424)
 LOBBY_SIZE_REF = (333, 623)
-SLOTS = [
-    (0, 0),       # Окно 1
-    (280, 420),   # Окно 2
-    (830, 0),     # Окно 3
-    (1105, 425)   # Окно 4
-]
-LOBBY_POS = (1657, 143)
+SLOTS = [(0, 0), (280, 420), (830, 0), (1105, 425)]
+LOBBY_POS = (1642, 143)
 LOBBY_SIZE = (333, 623)
 BOT_PLAYER_TITLE = "Holdem Desktop"
 BOT_PLAYER_POS = (1386, 0)
@@ -31,7 +26,7 @@ CAMTASIA_POS = (1256, 836)
 RESTART_INTERVAL = 4 * 60 * 60
 INITIAL_DELAY_SEC = 2
 FLASH_DURATION = 2500
-BLINK_TRIGGER_TIME = 14400 - (25 * 60)  # 3ч 35м = 1500 сек до конца
+BLINK_TRIGGER_TIME = RESTART_INTERVAL - 1500
 
 # === Глобальные переменные ===
 auto_recording = False
@@ -43,9 +38,9 @@ recording_thread = None
 progress_thread = None
 monitor_thread = None
 
-# === Tkinter GUI ===
+# === UI ===
 root = tk.Tk()
-root.title("CGGHelper – Утилита")
+root.title(APP_TITLE + " – Утилита")
 root.geometry("420x290")
 root.configure(bg="#1e1e1e")
 root.resizable(False, False)
@@ -56,7 +51,7 @@ except: pass
 status_label = tk.StringVar(value="Автозапись отключена")
 label_time = tk.StringVar(value="След. перезапуск: --:--:--")
 
-# === Вспомогательные ===
+# === Утилиты ===
 def flash_message(text, duration=FLASH_DURATION):
     flash = tk.Toplevel(root)
     flash.overrideredirect(True)
@@ -105,7 +100,7 @@ def is_valid_table_window(w):
 def any_valid_tables_exist():
     return any(is_valid_table_window(w) for w in gw.getAllWindows())
 
-# === Расстановка ===
+# === Расстановка окон ===
 def place_tables():
     log("[CGG] Расстановка столов...")
     tables = [w for w in gw.getAllWindows() if is_valid_table_window(w)][:4]
@@ -120,23 +115,69 @@ def place_tables():
 
 def place_lobby_bot_rec():
     log("[CGG] Расстановка остального...")
+
+    if not any("Task Manager" in t for t in gw.getAllTitles()):
+        log("🚀 Запуск Task Manager")
+        try:
+            subprocess.Popen("taskmgr")
+            time.sleep(3)
+            pyautogui.press("tab", presses=2, interval=0.1)
+            pyautogui.press("enter")
+            time.sleep(1)
+            pyautogui.rightClick(400, 200)
+            time.sleep(0.5)
+            pyautogui.press("down")
+            pyautogui.press("enter")
+            time.sleep(2)
+        except Exception as e:
+            log(f"[ERR] TaskMgr: {e}")
+
     for win in gw.getAllWindows():
         try:
-            title = win.title
-            if BOT_PLAYER_TITLE in title:
+            if BOT_PLAYER_TITLE in win.title:
                 win.restore(); win.moveTo(*BOT_PLAYER_POS); win.resizeTo(*BOT_PLAYER_SIZE)
+                win.alwaysOnTop = False
                 log("✅ Бот-плеер размещён")
-            elif "Recording" in title:
-                win.restore(); win.moveTo(*CAMTASIA_POS)
-                log("✅ Camtasia размещена")
-            elif is_aspect_match(win.width, win.height, LOBBY_ASPECT):
+                break
+        except Exception as e:
+            log(f"[ERR] Плеер: {e}")
+
+    for win in gw.getAllWindows():
+        try:
+            if is_aspect_match(win.width, win.height, LOBBY_ASPECT):
                 win.restore(); win.moveTo(*LOBBY_POS); win.resizeTo(*LOBBY_SIZE)
                 win.alwaysOnTop = True
                 log("✅ Лобби размещено")
+                break
         except Exception as e:
-            log(f"[ERR] {win.title}: {e}")
+            log(f"[ERR] Лобби: {e}")
 
-# === Camtasia логика ===
+    for win in gw.getAllWindows():
+        try:
+            if "Recording" in win.title:
+                win.restore(); win.moveTo(*CAMTASIA_POS)
+                win.alwaysOnTop = True
+                log("✅ Camtasia размещена")
+                break
+        except Exception as e:
+            log(f"[ERR] Camtasia: {e}")
+
+    for win in gw.getAllWindows():
+        try:
+            if "Task Manager" in win.title and "Summary" in win.title:
+                win.moveTo(0, 800)
+                win.alwaysOnTop = True
+                log("✅ TaskMgr перемещён")
+                break
+        except Exception as e:
+            log(f"[ERR] TaskMgr: {e}")
+
+# === Camtasia ===
+def move_camtasia_home():
+    for win in gw.getWindowsWithTitle(CAMTASIA_TITLE):
+        try: win.moveTo(*CAMTASIA_POS); log("↩️ Camtasia возвращена")
+        except: pass
+
 def is_camtasia_active():
     return any("recorder" in p.info['name'].lower() for p in psutil.process_iter(attrs=['name']))
 
@@ -152,45 +193,58 @@ def focus_camtasia():
 def start_recording():
     global is_looping
     if not is_looping and is_camtasia_active():
-        log("▶️ Запуск записи...")
-        focus_camtasia(); pyautogui.press("f9"); time.sleep(1.5)
+        log("▶️ Старт записи")
+        focus_camtasia()
+        pyautogui.press("f9")
+        time.sleep(1.5)
+        if not is_recording_window_open():
+            log("⚠️ Повтор F9")
+            pyautogui.press("f9")
+            time.sleep(1.5)
         if is_recording_window_open():
             is_looping = True
             log("✅ Запись началась")
+            move_camtasia_home()
         else:
-            log("[WARN] Запись не началась")
+            log("[WARN] Camtasia не стартанула")
 
 def stop_recording():
     global is_looping, blinking
     blinking = False
     if is_looping and is_camtasia_active():
-        log("⏹️ Остановка записи...")
-        focus_camtasia(); pyautogui.press("f10"); time.sleep(1.5)
+        log("⏹️ Остановка записи")
+        focus_camtasia()
+        pyautogui.press("f10")
+        time.sleep(1.5)
         if not is_recording_window_open():
             is_looping = False
             log("✅ Запись остановлена")
+            move_camtasia_home()
         else:
-            log("[WARN] Запись не остановилась")
+            log("[WARN] F10 не сработал")
 
 def start_blinking_loop():
-    def _blink_loop():
+    def _blink():
         global blinking
         while blinking and remaining_time > 0:
             if not any_valid_tables_exist() or not is_camtasia_active():
                 blinking = False
                 root.configure(bg="#1e1e1e")
                 return
-            root.configure(bg="#ffcccc"); time.sleep(0.4)
+            root.configure(bg="#ff0000"); time.sleep(0.4)
             root.configure(bg="#ffffff"); time.sleep(0.4)
-            root.configure(bg="#1e1e1e"); time.sleep(1)
-    threading.Thread(target=_blink_loop, daemon=True).start()
+    threading.Thread(target=_blink, daemon=True).start()
 
 def update_progress():
+    global blinking, is_looping
     while auto_recording and not halt_event.is_set():
         mins, secs = divmod(remaining_time, 60)
         hrs, mins = divmod(mins, 60)
         label_time.set(f"След. перезапуск: {hrs:02}:{mins:02}:{secs:02}")
         progress['value'] = 100 * (RESTART_INTERVAL - remaining_time) / RESTART_INTERVAL
+        if is_looping and not is_recording_window_open():
+            log("⚠️ Camtasia крашнулась. Перезапуск...")
+            stop_recording(); time.sleep(2); start_recording()
         time.sleep(10)
 
 def recording_cycle():
@@ -198,19 +252,16 @@ def recording_cycle():
     status_label.set("⏳ Подготовка...")
     flash_message("⚙️ Подготовка записи")
     stop_recording(); time.sleep(INITIAL_DELAY_SEC)
-    status_label.set("▶️ Запись начнётся")
     start_recording()
     remaining_time = RESTART_INTERVAL
+    status_label.set("▶️ Запись активна")
     while remaining_time > 0:
         if halt_event.is_set(): stop_recording(); return
         if not is_camtasia_active():
-            log("❌ Camtasia закрыта. Запись остановлена.")
-            toggle_auto(force_off=True); return
+            log("❌ Camtasia закрыта"); toggle_auto(force_off=True); return
         if any('Paused...' in t for t in gw.getAllTitles()):
-            log("⏸️ Пауза — перезапуск")
-            stop_recording(); time.sleep(1)
-            start_recording()
-        if remaining_time == BLINK_TRIGGER_TIME and not blinking:
+            log("⏸️ Пауза — перезапуск"); stop_recording(); time.sleep(1); start_recording()
+        if remaining_time <= 1500 and not blinking:
             blinking = True
             start_blinking_loop()
         time.sleep(1)
@@ -227,8 +278,7 @@ def toggle_auto(force_on=False, force_off=False):
         status_label.set("Автозапись отключена")
     elif force_on or not auto_recording:
         if not is_camtasia_active():
-            status_label.set("❗ Camtasia не запущена")
-            return
+            status_label.set("❗ Camtasia не запущена"); return
         halt_event.clear(); auto_recording = True
         recording_thread = threading.Thread(target=recording_cycle, daemon=True)
         progress_thread = threading.Thread(target=update_progress, daemon=True)
@@ -239,12 +289,11 @@ def toggle_auto(force_on=False, force_off=False):
 def monitor_loop():
     while True:
         time.sleep(3)
-        if not auto_recording:
-            if any_valid_tables_exist():
-                log("🧠 Найден стол — запуск автозаписи")
-                toggle_auto(force_on=True)
+        if not auto_recording and any_valid_tables_exist():
+            log("🧠 Найден стол — автозапись включается")
+            toggle_auto(force_on=True)
 
-# === GUI ===
+# === Интерфейс ===
 tk.Label(root, text="ClubGG – Панель управления", font=("Segoe UI", 13, "bold"), fg="white", bg="#1e1e1e").pack(pady=(12, 6))
 frame = tk.Frame(root, bg="#1e1e1e"); frame.pack(padx=16, fill="x")
 btn1 = tk.Button(frame, text="🃏 Расставить столы", font=("Segoe UI", 11), bg="#4CAF50", fg="white", command=place_tables)
