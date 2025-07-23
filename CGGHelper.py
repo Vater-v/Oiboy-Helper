@@ -8,7 +8,7 @@ import psutil
 
 # === Константы ===
 APP_TITLE = "CGGHelper"
-VERSION = "2.2"
+VERSION = "2.3"  # Новая версия
 TABLE_ASPECT = 557 / 424
 LOBBY_ASPECT = 333 / 623
 MIN_TABLE_SCALE = 0.75
@@ -111,12 +111,16 @@ def any_valid_tables_exist():
 def place_tables():
     log("[CGG] Расстановка столов...")
     # Игнорируем только свернутые столы
-    tables = [w for w in gw.getAllWindows() if is_valid_table_window(w) and not w.isMinimized()][:4]
+    tables = [w for w in gw.getAllWindows() if is_valid_table_window(w) and not w.isMinimized() and w.isVisible()]
+    if len(tables) == 0:
+        log("[WARN] Столы не найдены.")
     for i, (win, (x, y)) in enumerate(zip(tables, SLOTS), 1):
         try:
-            win.restore(); time.sleep(0.1)
-            win.moveTo(x, y)
-            win.resizeTo(*TABLE_SIZE_REF)
+            if win.isMinimized():
+                win.restore()  # Восстанавливаем окно, если оно было свернуто
+            time.sleep(0.1)  # Небольшая задержка
+            win.moveTo(x, y)  # Расставляем на экране
+            win.resizeTo(*TABLE_SIZE_REF)  # Изменяем размер
             log(f"Стол {i} — {win.title}")
         except Exception as e:
             log(f"[ERR] Стол {i}: {e}")
@@ -166,7 +170,6 @@ def place_lobby_bot_rec():
                 break
         except Exception as e:
             log(f"[ERR] Camtasia: {e}")
-
 
 # === Камтазия: позиция ===
 def move_camtasia_home():
@@ -224,7 +227,6 @@ def start_recording():
             move_camtasia_home()
         else:
             log("[WARN] Camtasia не стартанула")
-
 # === Остановка записи ===
 def stop_recording():
     global is_looping, blinking
@@ -240,20 +242,6 @@ def stop_recording():
             move_camtasia_home()
         else:
             log("[WARN] F10 не сработал")
-
-# === Мигание окна ===
-def start_blinking_loop():
-    def _blink():
-        global blinking
-        while blinking and remaining_time > 0:
-            if not any_valid_tables_exist() or not is_camtasia_active():
-                blinking = False
-                root.configure(bg="#1e1e1e")
-                return
-            root.configure(bg="#ff0000"); time.sleep(0.4)
-            root.configure(bg="#ffffff"); time.sleep(0.4)
-    threading.Thread(target=_blink, daemon=True).start()
-
 
 # === Обновление прогресс-бара с цветом ===
 def update_progress():
@@ -327,6 +315,22 @@ def toggle_auto(force_on=False, force_off=False):
         recording_thread.start(); progress_thread.start()
         toggle_btn.config(text="Автозапись: ВКЛ", bg="#4CAF50")
         status_label.set("Автозапись включена")
+# === Мигание окна ===
+def start_blinking_loop():
+    def _blink():
+        global blinking
+        while blinking and remaining_time > 0:
+            if not any_valid_tables_exist() or not is_camtasia_active():
+                blinking = False
+                root.configure(bg="#1e1e1e")  # Восстановить цвет фона, если условие не выполняется
+                return
+            root.configure(bg="#ff0000")  # Красный фон
+            time.sleep(0.4)  # Задержка между миганиями
+            root.configure(bg="#ffffff")  # Белый фон
+            time.sleep(0.4)
+    
+    threading.Thread(target=_blink, daemon=True).start()  # Запуск мигающего потока в фоне
+
 
 # === Мониторинг: автостарт при появлении стола ===
 def monitor_loop():
@@ -358,3 +362,4 @@ tk.Label(root, textvariable=status_label, font=("Segoe UI", 8), fg="gray", bg="#
 monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
 monitor_thread.start()
 root.mainloop()
+
