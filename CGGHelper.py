@@ -1,4 +1,3 @@
-#2.1 stable 95%
 import tkinter as tk
 from tkinter import ttk
 import pygetwindow as gw
@@ -6,11 +5,10 @@ import pyautogui
 import threading
 import time
 import psutil
-import subprocess
 
 # === Константы ===
 APP_TITLE = "CGGHelper"
-VERSION = "2.1"
+VERSION = "2.2"
 TABLE_ASPECT = 557 / 424
 LOBBY_ASPECT = 333 / 623
 MIN_TABLE_SCALE = 0.75
@@ -24,9 +22,10 @@ BOT_PLAYER_POS = (1386, 0)
 BOT_PLAYER_SIZE = (701, 364)
 CAMTASIA_TITLE = "Camtasia Recorder"
 CAMTASIA_POS = (1256, 836)
-RESTART_INTERVAL = 4 * 60 * 60
+RESTART_INTERVAL = 4 * 60 * 60  # 4 часа
 INITIAL_DELAY_SEC = 2
 FLASH_DURATION = 2500
+BLINK_TRIGGER_TIME = RESTART_INTERVAL - (25 * 60)  # за 25 минут до перезапуска
 
 # === Глобальные переменные ===
 auto_recording = False
@@ -108,9 +107,10 @@ def is_valid_lobby_window(w):
 def any_valid_tables_exist():
     return any(is_valid_table_window(w) or is_valid_lobby_window(w) for w in gw.getAllWindows())
 
-# === Расстановка столов (с проверкой на свернутые) ===
+# === Расстановка столов ===
 def place_tables():
     log("[CGG] Расстановка столов...")
+    # Игнорируем только свернутые столы
     tables = [w for w in gw.getAllWindows() if is_valid_table_window(w) and not w.isMinimized()][:4]
     for i, (win, (x, y)) in enumerate(zip(tables, SLOTS), 1):
         try:
@@ -167,7 +167,8 @@ def place_lobby_bot_rec():
         except Exception as e:
             log(f"[ERR] Camtasia: {e}")
 
-# === Camtasia: позиция ===
+
+# === Камтазия: позиция ===
 def move_camtasia_home():
     for win in gw.getWindowsWithTitle(CAMTASIA_TITLE):
         try:
@@ -176,7 +177,7 @@ def move_camtasia_home():
         except:
             pass
 
-# === Camtasia: состояния ===
+# === Камтазия: состояния ===
 def is_camtasia_active():
     return any("recorder" in p.info['name'].lower() for p in psutil.process_iter(attrs=['name']))
 
@@ -199,13 +200,18 @@ def start_recording():
     if not is_looping and is_camtasia_active():
         log("▶️ Старт записи")
         focus_camtasia()
-        
+
         # Если запись на паузе — сначала снимаем с паузы (F10), потом начинаем новую запись (F9)
         if any('Paused...' in t for t in gw.getAllTitles()):
             log("⏸️ Запись на паузе — снимаем с паузы и перезапускаем")
             pyautogui.press("f10")  # Снимаем с паузы
             time.sleep(1.5)
         
+        if is_recording_window_open():
+            log("⏹️ Запись была активна, остановим её перед новым запуском")
+            pyautogui.press("f10")  # Останавливаем запись перед новым стартом
+            time.sleep(1.5)
+
         pyautogui.press("f9")  # Старт записи
         time.sleep(1.5)
         if not is_recording_window_open():
@@ -234,6 +240,20 @@ def stop_recording():
             move_camtasia_home()
         else:
             log("[WARN] F10 не сработал")
+
+# === Мигание окна ===
+def start_blinking_loop():
+    def _blink():
+        global blinking
+        while blinking and remaining_time > 0:
+            if not any_valid_tables_exist() or not is_camtasia_active():
+                blinking = False
+                root.configure(bg="#1e1e1e")
+                return
+            root.configure(bg="#ff0000"); time.sleep(0.4)
+            root.configure(bg="#ffffff"); time.sleep(0.4)
+    threading.Thread(target=_blink, daemon=True).start()
+
 
 # === Обновление прогресс-бара с цветом ===
 def update_progress():
